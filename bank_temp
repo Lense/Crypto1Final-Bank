@@ -14,6 +14,8 @@
 #include <vector>
 #include <utility>
 #include <string>
+#include <mutex>
+
 
 //=================================================================================================//
 
@@ -22,7 +24,7 @@
 class Account {
 public:
 	//Constructor
-	Account(const std::string& owner, const int& balance) { _owner_ = owner; _balance_ = balance; }
+	Account(const std::string& owner, const int& balance) { _owner_ = owner; _balance_ = balance; _lock_ = false; }
 
 	//Accessors
 	bool verify_account(const std::string& name) const { return name == _owner_; } 
@@ -125,8 +127,14 @@ std::pair<bool, int> Account::transfer_funds(const int& amount, Account* target_
 
 //=================================================================================================//
 
+// Declare bank accounts, w/ associated mutexes, as global variable
+Account Bank_Accounts[3] { {"Alice", 100}, {"Bob", 50}, {"Eve", 0} };
+std::mutex mtx[3];
+
 void* client_thread(void* arg);
 void* console_thread(void* arg);
+
+void process_packet();
 
 int main(int argc, char* argv[])
 {
@@ -137,12 +145,6 @@ int main(int argc, char* argv[])
 	}
 
 	unsigned short ourport = atoi(argv[1]);
-
-	// Initialize bank accounts
-	std::vector<Account> Bank_Accounts;
-	Bank_Accounts.push_back(Account("Alice", 100));
-	Bank_Accounts.push_back(Account("Bob", 50));
-	Bank_Accounts.push_back(Account("Eve", 0));
 
 	//socket setup
 	int lsock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
@@ -172,6 +174,9 @@ int main(int argc, char* argv[])
 		return -1;
 	}
 
+	const int max_connect = 16;
+	int current_connect = 0;
+
 	pthread_t cthread;
 	pthread_create(&cthread, NULL, console_thread, NULL);
 
@@ -184,8 +189,14 @@ int main(int argc, char* argv[])
 		if(csock < 0)	//bad client, skip it
 			continue;
 
-		pthread_t thread;
-		pthread_create(&thread, NULL, client_thread, (void*)csock);
+		if(current_connect < max_connect) {
+			current_connect++;
+			pthread_t thread;
+			pthread_create(&thread, NULL, client_thread, (void*)csock);
+		}
+		else {
+			close(csock);
+		}
 	}
 }
 
@@ -194,6 +205,11 @@ void* client_thread(void* arg)
 	int csock = (int)arg;
 
 	printf("[bank] client ID #%d connected\n", csock);
+
+	// Create variable to reference account that's in use
+	int acct_num = 999;
+
+	mtx[acct_num].lock();
 
 	//input loop
 	int length;
@@ -214,7 +230,15 @@ void* client_thread(void* arg)
 			break;
 		}
 
+		// Place holder variables to be used to process account actions
+		std::string acct_1 = "";
+		std::string acct_2 = "";
+		int action = 0; 
+		int amount = 0;
+
 		//TODO: process packet data
+
+		std::pair<int, int> return_data = process_account_action(acct_1, action, amount, acct_2);
 
 		//TODO: put new data in packet
 
@@ -235,6 +259,12 @@ void* client_thread(void* arg)
 	printf("[bank] client ID #%d disconnected\n", csock);
 
 	close(csock);
+	current_connect--;
+
+	//If an account has successfully been "logged" into, unlock the associated mutex
+	//when the connection closes.
+	if(acct_num != 999 && acct_num >= 0 && acct_num <= 2) mtx[acct_num].unlock();
+
 	return NULL;
 }
 
@@ -249,4 +279,95 @@ void* console_thread(void* arg)
 
 		//TODO: your input parsing code has to go here
 	}
+}
+
+/* 
+   0 = "invalid request"  |  "invalid request"
+   1 = "return balance"   |  "balance"
+   2 = "deposit"          |  "successful deposit"
+   3 = "withdraw"         |  "successful withdrawal"
+   4 = "transfer"         |  "successful transfer"
+*/
+
+std::pair<int, int> process_account_action(const std::string& acct_1 = "", const int& action = 0, const int& amount = 0, const std::string& acct_2 = "") {
+	// Return "invalid request" if no info passed to function
+	if(acct_1.empty()) {
+		std::pair<int, int> tmp = std::make_pair(0, 0);
+		return tmp;
+	}
+	// Find the correct bank account
+	int i = 0;
+	while(i < 3 && !Bank_Accounts[i]->verify_account(acct_1)) {
+		i++;
+	}
+	// Return "invalid request" if account not found
+	if(i == 3) {
+		std::pair<int, int> tmp = std::make_pair(0, 0);
+		return tmp;
+	}
+	// Begin to process actions
+	// Return "invalid request" if no action specified
+	if(action == 0) {
+		std::pair<int, int> tmp = std::make_pair(0, 0);
+		return tmp;
+	}
+	// Return balance for the specified account
+	else if(action == 1) {
+		std::pair<int, int> tmp = std::make_pair(3, Bank_Accounts[i]->get_balance());
+		return tmp;
+	}
+	// Deposit funds into the account
+	else if(action == 2) {
+		std::pair<bool, int> results = Bank_Accounts[i]->deposit_funds(amount);
+		if(results.first) {
+			std::pair<int, int> tmp = std::make_pair(4, results.second);
+			return tmp;
+		}
+		else {
+			std::pair<int, int> tmp = std::make_pair(0, 0);
+			return tmp;
+		}
+	}
+	// Withdraw funds from account
+	else if(action == 3) {
+		std::pair<bool, int> results = Bank_Accounts[i]->withdraw_funds(amount, );
+		if(results.first) {
+			std::pair<int, int> tmp = std::make_pair(5, results.second);
+			return tmp;
+		}
+		else {
+			std::pair<int, int> tmp = std::make_pair(0, 0);
+			return tmp;
+		}
+	}
+	// Transfer funds to another account
+	else if (action == 4) {
+		// Return "invalid request" if no info passed to acct_2
+		if(acct_2.empty()) {
+			std::pair<int, int> tmp = std::make_pair(0, 0);
+			return tmp;
+		}
+		// Find the correct bank account
+		int j = 0;
+		while(j < 3 && !Bank_Accounts[j]->verify_account(acct_2)) {
+			j++;
+		}
+		// Return "invalid request" if account not found
+		if(j == 3) {
+			std::pair<int, int> tmp = std::make_pair(0, 0);
+			return tmp;
+		}
+		// Initiate transfer if account found
+		Account* target_account = Bank_Accounts[j]->get_account();
+		std::pair<bool, int> results = Bank_Accounts[i]->transfer_funds(amount, target_account);
+		if(results.first) {
+			std::pair<int, int> tmp = std::make_pair(6, results.second);
+			return tmp;
+		}
+		else {
+			std::pair<int, int> tmp = std::make_pair(0, 0);
+			return tmp;
+		}
+	}
+
 }
