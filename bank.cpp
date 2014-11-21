@@ -11,11 +11,14 @@
 #include <stdio.h>
 #include <pthread.h>
 #include <string.h>
-#include <stdint.h>
 #include "structs.h"
 
-// Declare bank accounts, w/ associated mutexes, as global variable
-Account Bank_Accounts[3] { {0, 3141592653589793238, 100}, {1, 1619033988749894848, 50}, {2, 2718281828459045235, 0} };
+// Declare bank accounts, w/ associated mutexes (FIXME no mutexes?), as global variable
+Account bank_accounts[] = {
+	{0, 3141592653LL, 100},
+	{1, 1619033988LL, 50},
+	{2, 2718281828LL, 0}
+};
 
 void* client_thread(void* arg);
 void* console_thread(void* arg);
@@ -23,7 +26,7 @@ bool deposit_amount(const uint8_t id, const uint64_t amount);
 bool withdraw_amount(const uint8_t id, const uint64_t amount);
 bool transfer_amount(const uint8_t id, const uint64_t amount, const uint8_t id2);
 
-int main(int argc, char* argv[])
+int main(int argc, char** argv)
 {
 	if(argc != 2)
 	{
@@ -76,7 +79,8 @@ int main(int argc, char* argv[])
 		if(csock < 0)	//bad client, skip it
 			continue;
 
-		if(current_connect < max_connect) {
+		if(current_connect < max_connect)
+		{
 			current_connect++; // Have not yet implemented a decrementer for this variable
 			pthread_t thread;
 			pthread_create(&thread, NULL, client_thread, (void*)csock);
@@ -146,34 +150,38 @@ void* console_thread(void* arg)
 	}
 }
 
-bool deposit_amount(const uint8_t id, const uint64_t amount) {
+bool deposit_amount(const uint8_t id, const uint64_t amount)
+{
 	if(amount < 0 || id < 0 || id > 2) return false;
-	uint64_t temp_balance = Bank_Accounts[id].balance;
+	uint64_t temp_balance = bank_accounts[id].balance;
 	temp_balance += amount;
-	if(temp_balance < Bank_Accounts[id].balance) return false;
-	Bank_Accounts[id].balance = temp_balance;
+	if(temp_balance < bank_accounts[id].balance) return false;
+	bank_accounts[id].balance = temp_balance;
 	return true;
 }
 
-bool withdraw_amount(const uint8_t id, const uint64_t amount) {
+bool withdraw_amount(const uint8_t id, const uint64_t amount)
+{
 	if(amount < 0 || id < 0 || id > 2) return false;
-	if(Bank_Accounts[id].balance < amount) return false;
-	uint64_t temp_balance = Bank_Accounts[id].balance;
+	if(bank_accounts[id].balance < amount) return false;
+	uint64_t temp_balance = bank_accounts[id].balance;
 	temp_balance -= amount;
-	if(temp_balance > Bank_Accounts[id].balance) return false;
-	Bank_Accounts[id].balance = temp_balance;
+	if(temp_balance > bank_accounts[id].balance) return false;
+	bank_accounts[id].balance = temp_balance;
 	return true;
 }
 
-bool transfer_amount(const uint8_t id, const uint64_t amount, const uint8_t id2) {
+bool transfer_amount(const uint8_t id, const uint64_t amount, const uint8_t id2)
+{
 	if(amount < 0 || id < 0 || id > 2) return false;
 	if(id == id2 || id2 < 0 || id2 > 2) return false;
-	if(Bank_Accounts[id].balance < amount) return false;
-	uint64_t temp_balance1 = Bank_Accounts[id].balance;
-	uint64_t temp_balance2 = Bank_Accounts[id2].balance;
+	if(bank_accounts[id].balance < amount) return false;
+	uint64_t temp_balance1 = bank_accounts[id].balance;
+	//uint64_t temp_balance2 = bank_accounts[id2].balance; // FIXME unused
 	if(!withdraw_amount(id, amount)) return false;
-	if(!deposit_amount(id2, amount)) {
-		Bank_Accounts[id].balance = temp_balance1; //Reset account 1 if this action fails.
+	if(!deposit_amount(id2, amount))
+	{
+		bank_accounts[id].balance = temp_balance1; //Reset account 1 if this action fails.
 		return false;
 	}
 	return true;

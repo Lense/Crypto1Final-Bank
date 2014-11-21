@@ -1,10 +1,29 @@
 #include <stdint.h>
 
-struct Account {
-	Account(const uint8_t& my_id, const uint8_t& my_pin, const uint64_t& my_balance) { id = my_id; pin = my_pin; balance = my_balance; }
-	//Variables
+typedef struct
+{
 	uint8_t id;
-	uint64_t pin; 
+	uint32_t pin;
 	uint64_t balance;
-};
+} Account;
 
+typedef struct
+{
+	uint8_t message[7];
+	uint64_t session_token;
+	uint8_t transaction_num;
+} server_to_ATM;
+
+typedef struct
+{
+	uint8_t action;
+	uint8_t account_src;
+	uint8_t account_dst;
+	union
+	{
+		uint32_t amount;
+		uint32_t pin;
+	};
+	uint64_t session_token;
+	uint8_t transaction_num;
+} ATM_to_server;
