@@ -9,7 +9,7 @@ typedef struct
 
 typedef struct
 {
-	uint8_t message[7];
+	uint8_t message[6];
 	uint64_t session_token;
 	uint8_t transaction_num;
 } server_to_ATM;
@@ -17,8 +17,7 @@ typedef struct
 typedef struct
 {
 	uint8_t action;
-	uint8_t account_src;
-	uint8_t account_dst;
+	uint8_t accounts;
 	union
 	{
 		uint32_t amount;
