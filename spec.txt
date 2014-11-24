@@ -24,3 +24,8 @@ Actions:
 	2 - withdraw [amount] - verifies sufficient funds, then prints “xxx withdrawn” and debits the balance accordingly
 	3 - logout - terminates the current session
 	4 - transfer [amount] [username] - verifies destination user exists, then trans-fers the requested amount
+
+Account numbers:
+	0 - Alice
+	1 - Bob
+	2 - Eve

@@ -123,7 +123,7 @@ void input_loop(int sock, ATM_to_server auth, server_to_ATM initial_rec)
 	{
 		switch(ch)
 		{
-				case KEY_DOWN:
+			case KEY_DOWN:
 				form_driver(my_form, REQ_NEXT_FIELD);
 				form_driver(my_form, REQ_END_LINE);
 				break;
@@ -164,14 +164,11 @@ void input_loop(int sock, ATM_to_server auth, server_to_ATM initial_rec)
 ATM_to_server authenticate_credentials()
 {
 	/*
-	 * TODO here:
-	 *  add better prompts with more usage info
-	 *  set field options (correctly) so it only takes numbers
+	 * TODO here (minor improvements):
+	 *  add more usage info
 	 *  figure out why freeing segfaults here but not in standalone code
 	 *  make prettier
 	 */
-
-
 
 	FIELD *field[2];
 	FORM  *my_form;
@@ -187,15 +184,22 @@ ATM_to_server authenticate_credentials()
 	attron(COLOR_PAIR(1));
 
 	//FIELD *new_field(int height, int width, int toprow, int leftcol, int offscreen, int nbuffers);
-	field[0] = new_field(1, 10, 4, 24, 0, 0);
+	field[0] = new_field(1, 5, 4, 24, 0, 0);
 	field[1] = new_field(1, 10, 6, 24, 0, 0);
 	field[2] = NULL;
 
 	// Field options
 	set_field_back(field[0], A_UNDERLINE);
 	field_opts_off(field[0], O_AUTOSKIP);
+	field_opts_off(field[0], O_NULLOK);
 	set_field_back(field[1], A_UNDERLINE);
 	field_opts_off(field[1], O_AUTOSKIP);
+	field_opts_off(field[1], O_STATIC);
+	if(field_opts_on(field[1], O_NULLOK) != E_OK)
+		abort();
+	char* valid_account_names[3] = {"Alice", "Bob", "Eve"};
+	set_field_type(field[0], TYPE_ENUM, valid_account_names, 0, 0);
+	set_field_type(field[1], TYPE_INTEGER, 0, 1, 0xfffffffe);
 
 	my_form = new_form(field);
 	post_form(my_form);
@@ -207,11 +211,15 @@ ATM_to_server authenticate_credentials()
 	refresh();
 
 	// Character input loop
-	while((ch = getch()) != 0xa)
+	unsigned char loop = 1;
+	while(loop)
 	{
+		ch = getch();
 		switch(ch)
 		{
+			form_driver(my_form, REQ_VALIDATION);
 			case KEY_DOWN:
+			case 0x9:
 				form_driver(my_form, REQ_NEXT_FIELD);
 				form_driver(my_form, REQ_END_LINE);
 				break;
@@ -219,17 +227,73 @@ ATM_to_server authenticate_credentials()
 				form_driver(my_form, REQ_PREV_FIELD);
 				form_driver(my_form, REQ_END_LINE);
 				break;
+			case KEY_BACKSPACE:
+			case KEY_DC:
+			case 127:
+				form_driver(my_form, REQ_CLR_FIELD);
+				break;
+			case 0xa:
+				switch(form_driver(my_form, REQ_VALIDATION))
+				{
+					case E_OK:
+						if(field_buffer(field[0],0)[0]!=' ' && \
+								field_buffer(field[1],0)[0]!=' ')
+							loop = 0;
+						else
+							mvprintw(8, 10, "form not completely filled");
+						break;
+					case E_BAD_ARGUMENT:
+						mvprintw(8, 10, "bad argument");
+						break;
+					case E_BAD_STATE:
+						mvprintw(8, 10, "bad state");
+						break;
+					case E_NOT_POSTED:
+						mvprintw(8, 10, "not posted");
+						break;
+					case E_INVALID_FIELD:
+						mvprintw(8, 10, "invalid field");
+						break;
+					case E_REQUEST_DENIED:
+						mvprintw(8, 10, "invalid field");
+						break;
+					case E_SYSTEM_ERROR:
+						mvprintw(8, 10, "system error");
+						break;
+					default:
+						mvprintw(8, 10, "something else");
+						break;
+				}
 			default:
 				form_driver(my_form, ch);
 				break;
 		}
-		form_driver(my_form, REQ_VALIDATION);
 	}
 
+	FILE* card_file;
+	switch(field_buffer(field[0], 0)[0])
+	{
+		case 'A':
+			card_file = fopen("Alice.card", "r");
+			break;
+		case 'B':
+			card_file = fopen("Bob.card", "r");
+			break;
+		case 'E':
+			card_file = fopen("Eve.card", "r");
+			break;
+		default:
+			abort()
+	}
+	if(!card_file)
+		abort();
+	int account_number;
+	if(fscanf(card_file, "%d", &account_number) != 1)
+		abort();
 	ATM_to_server auth = {
-		0,
-		(uint8_t)atoi(field_buffer(field[0], 0)),
-		(uint8_t)atoi(field_buffer(field[1], 0)),
+		0, // Action login
+		(uint8_t)account_number,
+		(uint8_t)atoi(field_buffer(field[1], 0)), // PIN
 		0, // session token 0?
 		0
 	};
