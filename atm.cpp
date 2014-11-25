@@ -74,90 +74,247 @@ void input_loop(int sock, ATM_to_server auth, server_to_ATM initial_rec)
 {
 	/*
 	 * TODO here:
-	 *  add options for different actions
+	 *  *bugtest*
+	 *  move labels around so they don't overlap
+	 *  make the forms align
+	 *  test values set and received
+	 *  show what was sent by server
 	 *  make it actually loop
-	 *  show what was received by server
 	 */
 
 
 
-	FIELD *field[3];
-	FORM  *my_form;
+	// Begin boilerplate
+	FIELD* action_field[2];
+	FIELD* withdraw_field[2];
+	FIELD* transfer_field[3];
+	FORM* action_form;
+	FORM* withdraw_form;
+	FORM* transfer_form;
+	FORM* cur_form;
 	int ch;
 	
-
-
 	initscr();
 	cbreak();
 	noecho();
 	keypad(stdscr, true);
+	// End boilerplate
 	
-	//FIELD *new_field(int height, int width, int toprow, int leftcol, int offscreen, int nbuffers);
-	field[0] = new_field(1, 10, 4, 18, 0, 0);
-	field[1] = new_field(1, 10, 6, 18, 0, 0);
-	field[2] = new_field(1, 10, 8, 18, 0, 0);
-	field[3] = NULL;
+	// Action prompt
+	action_field[0] = new_field(1, 10, 4, 18, 0, 0);
+	action_field[1] = NULL;
+	set_field_back(action_field[0], A_UNDERLINE);
+	field_opts_off(action_field[0], O_AUTOSKIP);
+	const char* valid_actions[4] = {"balance", "withdraw", "logout", "transfer"};
+	set_field_type(action_field[0], TYPE_ENUM, valid_actions, 0, 0);
 
-	// Field options
-	set_field_back(field[0], A_UNDERLINE);
-	field_opts_off(field[0], O_AUTOSKIP);
-	set_field_back(field[1], A_UNDERLINE);
-	field_opts_off(field[1], O_AUTOSKIP);
-	set_field_back(field[2], A_UNDERLINE);
-	field_opts_off(field[2], O_AUTOSKIP);
-	// Testing
-	set_field_type(field[0], TYPE_INTEGER, 10, 0, 0xffffffff);
-
-	my_form = new_form(field);
-	post_form(my_form);
+	const char* valid_account_names[3] = {"Alice", "Bob", "Eve"};
+	action_form = new_form(action_field);
+	cur_form = action_form;
+	post_form(action_form);
 	refresh();
 	
-	// Prompts
+	// Prompt
 	mvprintw(4, 10, "action:");
-	mvprintw(6, 10, "account:");
-	mvprintw(8, 10, "amount:");
 	refresh();
 
 	// Character input loop
-	while((ch = getch()) != 0xa)
+	uint8_t action;
+	unsigned char loop = 1;
+	unsigned int fields_entered = 0;
+	while(loop)
 	{
+		ch = getch();
 		switch(ch)
 		{
+			form_driver(cur_form, REQ_VALIDATION);
 			case KEY_DOWN:
-				form_driver(my_form, REQ_NEXT_FIELD);
-				form_driver(my_form, REQ_END_LINE);
+			case 0x9:
+				form_driver(cur_form, REQ_NEXT_FIELD);
+				form_driver(cur_form, REQ_END_LINE);
 				break;
 			case KEY_UP:
-				form_driver(my_form, REQ_PREV_FIELD);
-				form_driver(my_form, REQ_END_LINE);
+				form_driver(cur_form, REQ_PREV_FIELD);
+				form_driver(cur_form, REQ_END_LINE);
 				break;
 			case KEY_BACKSPACE:
 			case KEY_DC:
 			case 127:
-				form_driver(my_form, REQ_CLR_FIELD);
+				form_driver(cur_form, REQ_CLR_FIELD);
 				break;
+			case 0xa:
+				switch(form_driver(cur_form, REQ_VALIDATION))
+				{
+					case E_OK:
+						switch(fields_entered)
+						{
+							case 0:
+								if(field_buffer(action_field[0],0)[0]!=' ')
+								{
+									fields_entered = 1;
+									mvprintw(14, 10, "selected action");
+								}
+								else
+								{
+									mvprintw(8, 10, "form not completely filled");
+									break;
+								}
+							case 1:
+								switch(field_buffer(action_field[0], 0)[0])
+								{
+									case 'b':
+										action = 1;
+										loop = 0;
+										break;
+									case 'w':
+										action = 2;
+
+										// amount prompt
+										withdraw_field[0] = new_field(1, 10, 8, 18, 0, 0);
+										withdraw_field[1] = NULL;
+										set_field_back(withdraw_field[0], A_UNDERLINE);
+										field_opts_off(withdraw_field[0], O_AUTOSKIP);
+										set_field_type(withdraw_field[0], TYPE_INTEGER, 0, 1, 0xfffffffe);
+
+										withdraw_form = new_form(withdraw_field);
+										cur_form = withdraw_form;
+										post_form(withdraw_form);
+										refresh();
+
+										fields_entered++; // close enough
+										mvprintw(8, 10, "amount:");
+										refresh();
+										break;
+									case 'l':
+										action = 3;
+										loop = 0;
+										break;
+									case 't':
+										action = 4;
+
+										// Dest account prompt
+										transfer_field[0] = new_field(1, 10, 6, 18, 0, 0);
+										set_field_back(transfer_field[0], A_UNDERLINE);
+										field_opts_off(transfer_field[0], O_AUTOSKIP);
+										set_field_type(transfer_field[0], TYPE_ENUM, valid_account_names, 0, 0);
+
+										// amount account prompt
+										transfer_field[1] = new_field(1, 10, 8, 18, 0, 0);
+										set_field_back(transfer_field[1], A_UNDERLINE);
+										field_opts_off(transfer_field[1], O_AUTOSKIP);
+										set_field_type(transfer_field[1], TYPE_INTEGER, 0, 1, 0xfffffffe);
+
+										transfer_field[2] = NULL;
+
+										transfer_form = new_form(transfer_field);
+										cur_form = transfer_form;
+										post_form(transfer_form);
+										mvprintw(6, 10, "account:");
+										mvprintw(8, 10, "amount:");
+										refresh();
+
+										fields_entered++; // close enough
+										break;
+									default:
+										abort();
+								}
+								break;
+							case 2:
+								switch(action)
+								{
+									case 2: // withdraw
+										if(field_buffer(withdraw_field[0],0)[0]!=' ')
+											loop = 0;
+										break;
+									case 4: // transfer
+										if(field_buffer(transfer_field[0],0)[0]!=' ' && \
+												field_buffer(transfer_field[1],0)[0]!=' ')
+											loop = 0;
+										break;
+									default:
+										abort();
+								}
+								break;
+							default:
+								abort();
+						}
+						break;
+					case E_BAD_ARGUMENT:
+						mvprintw(8, 10, "bad argument");
+						break;
+					case E_BAD_STATE:
+						mvprintw(8, 10, "bad state");
+						break;
+					case E_NOT_POSTED:
+						mvprintw(8, 10, "not posted");
+						break;
+					case E_INVALID_FIELD:
+						mvprintw(8, 10, "invalid field");
+						break;
+					case E_REQUEST_DENIED:
+						mvprintw(8, 10, "invalid field");
+						break;
+					case E_SYSTEM_ERROR:
+						mvprintw(8, 10, "system error");
+						break;
+					default:
+						mvprintw(8, 10, "something else");
+						break;
+				}
 			default:
-				form_driver(my_form, ch);
+				form_driver(cur_form, ch);
 				break;
 		}
-		form_driver(my_form, REQ_VALIDATION);
+	}
+	uint8_t account_dst = -1;
+	uint8_t amount = 0;
+	if(action == 4) // transfer
+	{
+		switch(field_buffer(transfer_field[0], 0)[0])
+		{
+			case 'A':
+				account_dst = 0;
+				break;
+			case 'B':
+				account_dst = 1;
+				break;
+			case 'E':
+				account_dst = 2;
+				break;
+			default:
+				abort();
+		}
+		amount = (uint8_t)atoi(field_buffer(transfer_field[1], 0));
+		free_field(transfer_field[0]);
+		free_field(transfer_field[1]);
+		unpost_form(transfer_form);
+		free_form(transfer_form);
+	}
+	else if(action == 2) // withdraw
+	{
+		amount = (uint8_t)atoi(field_buffer(withdraw_field[0], 0));
+		free_field(withdraw_field[0]);
+		unpost_form(withdraw_form);
+		free_form(withdraw_form);
 	}
 	ATM_to_server msg = {
-		(uint8_t)atoi(field_buffer(field[0], 0)),
-		(uint8_t)atoi(field_buffer(field[1], 0)),
-		(uint8_t)atoi(field_buffer(field[2], 0)),
-		0,
-		0
+		action,
+		(uint8_t)account_dst, // TODO bitmask with src
+		amount,
+		0, // Session token
+		0 // Session transaction number
 	};
 	server_to_ATM rec = encrypt_and_send(msg);
-
-	// It should loop around here
+	// TODO error check rec here
+	mvprintw(14, 10, "Received \"%s\" from bank", rec.message);
+	refresh();
 	
-	unpost_form(my_form);
-	free_form(my_form);
-	free_field(field[0]);
-	free_field(field[1]);
-	free_field(field[2]);
+
+	// It should loop around here TODO
+	
+	unpost_form(action_form);
+	free_form(action_form);
+	free_field(action_field[0]);
 	endwin();
 }
 
@@ -170,7 +327,7 @@ ATM_to_server authenticate_credentials()
 	 *  make prettier
 	 */
 
-	FIELD *field[2];
+	FIELD *field[3];
 	FORM  *my_form;
 	int ch;
 	
@@ -197,7 +354,7 @@ ATM_to_server authenticate_credentials()
 	field_opts_off(field[1], O_STATIC);
 	if(field_opts_on(field[1], O_NULLOK) != E_OK)
 		abort();
-	char* valid_account_names[3] = {"Alice", "Bob", "Eve"};
+	const char* valid_account_names[3] = {"Alice", "Bob", "Eve"};
 	set_field_type(field[0], TYPE_ENUM, valid_account_names, 0, 0);
 	set_field_type(field[1], TYPE_INTEGER, 0, 1, 0xfffffffe);
 
@@ -283,22 +440,23 @@ ATM_to_server authenticate_credentials()
 			card_file = fopen("Eve.card", "r");
 			break;
 		default:
-			abort()
+			abort();
 	}
 	if(!card_file)
 		abort();
 	int account_number;
 	if(fscanf(card_file, "%d", &account_number) != 1)
 		abort();
+	fclose(card_file);
 	ATM_to_server auth = {
 		0, // Action login
-		(uint8_t)account_number,
-		(uint8_t)atoi(field_buffer(field[1], 0)), // PIN
+		(uint8_t)account_number, // TODO bitmask with src
+		(uint32_t)atoi(field_buffer(field[1], 0)), // PIN
 		0, // session token 0?
 		0
 	};
 	
-	//unpost_form(my_form); // weird segfaults here TODO
+	unpost_form(my_form); // weird segfaults here TODO
 	free_form(my_form);
 	free_field(field[0]);
 	free_field(field[1]);
