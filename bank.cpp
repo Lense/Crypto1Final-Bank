@@ -13,7 +13,7 @@
 #include <string.h>
 #include "structs.h"
 
-// Declare bank accounts, w/ associated mutexes (FIXME no mutexes?), as global variable
+// Declare bank accounts
 Account bank_accounts[] = {
 	{0, 3141592653LL, 100},
 	{1, 1619033988LL, 50},
