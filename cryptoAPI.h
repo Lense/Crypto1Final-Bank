@@ -1,2 +1,2 @@
-int symmetricEncrypt(unsigned char* ptxt, int ptxtLen, unsigned char* key, unsigned char* IV, unsigned char* ctxt);
-int symmetricDecrypt(unsigned char* ctxt, int ctxtLen, unsigned char* key, unsigned char* IV, unsigned char* ptxt);
+int symmetric_encrypt(unsigned char* ptxt, unsigned char* ctxt);
+int symmetric_decrypt(unsigned char* ctxt, unsigned char* ptxt);

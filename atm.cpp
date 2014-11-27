@@ -12,61 +12,53 @@
 #include <string.h>
 #include <form.h>
 #include "structs.h"
+#include "cryptoAPI.h"
 
-server_to_ATM encrypt_and_send(ATM_to_server msg)
+server_to_ATM encrypt_and_send(ATM_to_server msg, int sock)
 {
 	 /*
 	  * TODO here:
-	  *  test msg (maybe?)
-	  *  encrypt msg
-	  *  put it in buf
-	  *  send (sample code below)
-	  *  check return
-	  *  decrypt
+	  *  test msg
 	  *  check valid return
-	  *  parse packet into struct
 	  */
 	
 
-	/*
-	char packet[16];
-	int length = 1;
-	//send the packet through the proxy to the bank
-	if(sizeof(int) != send(sock, &length, sizeof(int), 0))
+	int length = 16;
+	unsigned char msg_string[17];
+	memcpy(msg_string, &msg, length);
+	unsigned char packet[17];
+
+	// Encrypt message into packet
+	if(symmetric_encrypt(msg_string, packet) != length)
 	{
-		printf("fail to send packet length\n");
+		printf("failed to encrypt message\n");
 		abort();
 	}
+	
+	// Send packet through the proxy to the bank
 	if(length != send(sock, (void*)packet, length, 0))
 	{
 		printf("fail to send packet\n");
 		abort();
 	}
 	
-	//TODO: do something with response packet
-	if(sizeof(int) != recv(sock, &length, sizeof(int), 0))
-	{
-		printf("fail to read packet length\n");
-		abort();
-	}
-	if(length >= 1024)
-	{
-		printf("packet too long\n");
-		abort();
-	}
+	// Receive packet
 	if(length != recv(sock, packet, length, 0))
 	{
 		printf("fail to read packet\n");
 		abort();
 	}
-	*/
 
-	// SAMPLE to make it compile
-	server_to_ATM rec = {
-		"heyth",
-		0,
-		0
-	};
+	unsigned char rec_string[17];
+	// Decrypt packet into message
+	if(symmetric_decrypt(packet, rec_string) != length)
+	{
+		printf("failed to decrypt message\n");
+		abort();
+	}
+
+	server_to_ATM rec;
+	memcpy(&rec, rec_string, length);
 	return rec;
 }
 
@@ -304,7 +296,7 @@ void input_loop(int sock, ATM_to_server auth, server_to_ATM initial_rec)
 		0, // Session token
 		0 // Session transaction number
 	};
-	server_to_ATM rec = encrypt_and_send(msg);
+	server_to_ATM rec = encrypt_and_send(msg, sock);
 	// TODO error check rec here
 	mvprintw(14, 10, "Received \"%s\" from bank", rec.message);
 	refresh();
@@ -467,7 +459,6 @@ ATM_to_server authenticate_credentials()
 
 int main(int argc, char* argv[])
 {
-	/*
 	if(argc != 2)
 	{
 		printf("Usage: atm proxy-port\n");
@@ -495,12 +486,10 @@ int main(int argc, char* argv[])
 		printf("fail to connect to proxy\n");
 		return -1;
 	}
-	*/
 	
-	int sock=-1; // To help it compile without needing everything running
 	// Here is where our code starts
 	ATM_to_server auth = authenticate_credentials();
-	server_to_ATM rec = encrypt_and_send(auth);
+	server_to_ATM rec = encrypt_and_send(auth, sock);
 	input_loop(sock, auth, rec);
 	
 	//cleanup
