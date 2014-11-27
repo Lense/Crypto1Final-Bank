@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <form.h>
+#include <openssl/rand.h>
 #include "structs.h"
 #include "cryptoAPI.h"
 
@@ -71,6 +72,7 @@ void input_loop(int sock, ATM_to_server auth, server_to_ATM initial_rec)
 	 *  make the forms align
 	 *  test values set and received
 	 *  show what was sent by server
+	 *  BIG ONE: implement session tokens and session transaction number
 	 */
 
 
@@ -320,7 +322,6 @@ ATM_to_server authenticate_credentials()
 	/*
 	 * TODO here (minor improvements):
 	 *  add more usage info
-	 *  figure out why freeing segfaults here but not in standalone code
 	 *  make prettier
 	 */
 
@@ -424,6 +425,7 @@ ATM_to_server authenticate_credentials()
 		}
 	}
 
+	// Read account number from card
 	FILE* card_file;
 	switch(field_buffer(field[0], 0)[0])
 	{
@@ -445,20 +447,33 @@ ATM_to_server authenticate_credentials()
 	if(fscanf(card_file, "%d", &account_number) != 1)
 		abort();
 	fclose(card_file);
-	ATM_to_server auth = {
-		0, // Action login
-		(uint8_t)account_number, // TODO bitmask with src
-		(uint32_t)atoi(field_buffer(field[1], 0)), // PIN
-		0, // session token 0?
-		0
-	};
 	
-	unpost_form(my_form); // weird segfaults here TODO
+	// Get random session token
+	unsigned char rand_str[9];
+	if(RAND_bytes(rand_str, 8) != 1)
+	{
+		printf("failed to get high-quality randomness\n");
+		abort();
+	}
+	uint64_t session_token;
+	if(!memcpy(&session_token, rand_str, 8))
+		abort();
+	
+	// Cleanup
+	unpost_form(my_form); // weird segfaults here but I guess they went away ???
 	free_form(my_form);
 	free_field(field[0]);
 	free_field(field[1]);
 	endwin();
 
+	// Return auth struct
+	ATM_to_server auth = {
+		0, // Action login
+		(uint8_t)(account_number << 4),
+		(uint32_t)atoi(field_buffer(field[1], 0)), // PIN
+		session_token,
+		0
+	};
 	return auth;
 }
 
