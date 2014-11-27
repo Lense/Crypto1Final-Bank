@@ -22,7 +22,7 @@ server_to_ATM encrypt_and_send(ATM_to_server msg, int sock)
 	  *  test msg
 	  *  check valid return
 	  */
-	
+
 
 	int length = 16;
 	unsigned char msg_string[17];
@@ -35,14 +35,14 @@ server_to_ATM encrypt_and_send(ATM_to_server msg, int sock)
 		printf("failed to encrypt message\n");
 		abort();
 	}
-	
+
 	// Send packet through the proxy to the bank
 	if(length != send(sock, (void*)packet, length, 0))
 	{
 		printf("fail to send packet\n");
 		abort();
 	}
-	
+
 	// Receive packet
 	if(length != recv(sock, packet, length, 0))
 	{
@@ -86,7 +86,7 @@ void input_loop(int sock, ATM_to_server auth, server_to_ATM initial_rec)
 	FORM* transfer_form;
 	FORM* cur_form;
 	int ch;
-	
+
 	initscr();
 	cbreak();
 	noecho();
@@ -101,7 +101,7 @@ void input_loop(int sock, ATM_to_server auth, server_to_ATM initial_rec)
 	int logged_in = 1;
 	while(logged_in)
 	{
-		
+
 		// Action prompt
 		action_field[0] = new_field(1, 10, 4, 18, 0, 0);
 		action_field[1] = NULL;
@@ -113,7 +113,7 @@ void input_loop(int sock, ATM_to_server auth, server_to_ATM initial_rec)
 		cur_form = action_form;
 		post_form(action_form);
 		refresh();
-		
+
 		// Prompt
 		mvprintw(4, 10, "action:");
 		refresh();
@@ -300,7 +300,7 @@ void input_loop(int sock, ATM_to_server auth, server_to_ATM initial_rec)
 		}
 		ATM_to_server msg = {
 			action,
-			(uint8_t)account_dst, // TODO bitmask with src
+			(uint8_t)((auth.accounts & 0xf0) | (account_dst & 0x0f)),
 			amount,
 			0, // Session token
 			0 // Session transaction number
@@ -309,7 +309,7 @@ void input_loop(int sock, ATM_to_server auth, server_to_ATM initial_rec)
 		// TODO error check rec here
 		mvprintw(14, 10, "Received \"%s\" from bank", rec.message);
 		refresh();
-	
+
 		unpost_form(action_form);
 		free_form(action_form);
 		free_field(action_field[0]);
@@ -328,7 +328,7 @@ ATM_to_server authenticate_credentials()
 	FIELD *field[3];
 	FORM  *my_form;
 	int ch;
-	
+
 	initscr();
 	start_color();
 	cbreak();
@@ -359,7 +359,7 @@ ATM_to_server authenticate_credentials()
 	my_form = new_form(field);
 	post_form(my_form);
 	refresh();
-	
+
 	// Prompts
 	mvprintw(4, 10, "Account name:");
 	mvprintw(6, 10, "         PIN:");
@@ -447,7 +447,7 @@ ATM_to_server authenticate_credentials()
 	if(fscanf(card_file, "%d", &account_number) != 1)
 		abort();
 	fclose(card_file);
-	
+
 	// Get random session token
 	unsigned char rand_str[9];
 	if(RAND_bytes(rand_str, 8) != 1)
@@ -458,15 +458,8 @@ ATM_to_server authenticate_credentials()
 	uint64_t session_token;
 	if(!memcpy(&session_token, rand_str, 8))
 		abort();
-	
-	// Cleanup
-	unpost_form(my_form); // weird segfaults here but I guess they went away ???
-	free_form(my_form);
-	free_field(field[0]);
-	free_field(field[1]);
-	endwin();
 
-	// Return auth struct
+	// auth struct to be returned
 	ATM_to_server auth = {
 		0, // Action login
 		(uint8_t)(account_number << 4),
@@ -474,6 +467,14 @@ ATM_to_server authenticate_credentials()
 		session_token,
 		0
 	};
+
+	// Cleanup
+	unpost_form(my_form); // weird segfaults here but I guess they went away ???
+	free_form(my_form);
+	free_field(field[0]);
+	free_field(field[1]);
+	endwin();
+
 	return auth;
 }
 
@@ -484,7 +485,7 @@ int main(int argc, char* argv[])
 		printf("Usage: atm proxy-port\n");
 		return -1;
 	}
-	
+
 	//socket setup
 	unsigned short proxport = atoi(argv[1]);
 	int sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
@@ -506,12 +507,12 @@ int main(int argc, char* argv[])
 		printf("fail to connect to proxy\n");
 		return -1;
 	}
-	
+
 	// Here is where our code starts
 	ATM_to_server auth = authenticate_credentials();
 	server_to_ATM rec = encrypt_and_send(auth, sock);
 	input_loop(sock, auth, rec);
-	
+
 	//cleanup
 	close(sock);
 	return 0;
