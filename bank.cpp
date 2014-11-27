@@ -21,7 +21,9 @@ Account bank_accounts[] = {
 };
 
 void* client_thread(void* arg);
-void* console_thread(void* arg);
+//void* console_thread(void* arg);
+void bank_send(server_to_ATM * msg, int sock);
+void bank_recv(ATM_to_server * msg, int sock);
 bool deposit_amount(const uint8_t id, const uint64_t amount);
 bool withdraw_amount(const uint8_t id, const uint64_t amount);
 bool transfer_amount(const uint8_t id, const uint64_t amount, const uint8_t id2);
@@ -30,7 +32,7 @@ int main(int argc, char** argv)
 {
 	if(argc != 2)
 	{
-		printf("Usage: bank listen-port\n");
+		printf("[bank] Usage: bank listen-port\n");
 		return -1;
 	}
 
@@ -40,7 +42,7 @@ int main(int argc, char** argv)
 	int lsock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 	if(!lsock)
 	{
-		printf("fail to create socket\n");
+		printf("[bank] fail to create socket\n");
 		return -1;
 	}
 
@@ -53,22 +55,24 @@ int main(int argc, char** argv)
 	ipaddr[1] = 0;
 	ipaddr[2] = 0;
 	ipaddr[3] = 1;
+    
 	if(0 != bind(lsock, reinterpret_cast<sockaddr*>(&addr_l), sizeof(addr_l)))
 	{
-		printf("failed to bind socket\n");
+		printf("[bank] failed to bind socket\n");
 		return -1;
 	}
+    
 	if(0 != listen(lsock, SOMAXCONN))
 	{
-		printf("failed to listen on socket\n");
+		printf("[bank] failed to listen on socket\n");
 		return -1;
 	}
 
 	const int max_connect = 16;
 	int current_connect = 0;
 
-	pthread_t cthread;
-	pthread_create(&cthread, NULL, console_thread, NULL);
+	//pthread_t cthread;
+	//pthread_create(&cthread, NULL, console_thread, NULL);
 
 	//loop forever accepting new connections
 	while(1)
@@ -76,7 +80,9 @@ int main(int argc, char** argv)
 		sockaddr_in unused;
 		socklen_t size = sizeof(unused);
 		int csock = accept(lsock, reinterpret_cast<sockaddr*>(&unused), &size);
-		if(csock < 0)	//bad client, skip it
+		
+        // bad client, skip it
+        if(csock < 0)
 			continue;
 
 		if(current_connect < max_connect)
@@ -88,6 +94,59 @@ int main(int argc, char** argv)
 	}
 }
 
+void bank_recv(ATM_to_server * msg, int sock)
+{
+
+	int length = 16;
+	unsigned char packet[16];
+
+	// Receive packet
+	if(length != recv(sock, packet, length, 0))
+	{
+		printf("[bank] fail to read packet\n");
+		abort();
+	}
+
+	// Decrypt packet into message
+	if(symmetric_decrypt(packet, msg) != length)
+	{
+		printf("[bank] failed to decrypt message\n");
+		abort();
+	}
+    
+    // TODO: validate packet
+	if(false)
+	{
+		printf("[bank] packet did not decrypt properly\n");
+		abort();
+	}
+
+	return;
+}
+
+void bank_send(server_to_ATM * msg, int sock)
+{
+
+	int length = 16;
+	unsigned char packet[16];
+
+	// Encrypt message into packet
+	if(symmetric_encrypt(msg, packet) != length)
+	{
+		printf("[bank] failed to encrypt message\n");
+		abort();
+	}
+
+	// Send packet through the proxy to the bank
+	if(length != send(sock, (void*)packet, length, 0))
+	{
+		printf("fail to send packet\n");
+		abort();
+	}
+
+	return;
+}
+
 void* client_thread(void* arg)
 {
 	int csock = (int)arg;
@@ -95,39 +154,30 @@ void* client_thread(void* arg)
 	printf("[bank] client ID #%d connected\n", csock);
 
 	//input loop
-	int length;
-	char packet[1024];
+    bool result = false;
+    
+	ATM_to_server incoming;
+    server_to_ATM outgoing;
+    
+    
+    // TODO:
+    // auth/handshake/session stuff should probably happen out here,
+    // before we go into the main loop...
+    
 	while(1)
 	{
-		//read the packet from the ATM
-		if(sizeof(int) != recv(csock, &length, sizeof(int), 0))
-			break;
-		if(length >= 1024 || length <= 0) // Updated if statement requirements
-		{
-			printf("invalid packet length\n");
-			break;
-		}
-		if(length != recv(csock, packet, length, 0))
-		{
-			printf("[bank] fail to read packet\n");
-			break;
-		}
+
+        /* read and validate incoming packets */
+        bank_recv(&incoming, csock);
 
 		//TODO: process packet data
-
-		//TODO: put new data in packet
-
-		//send the new packet back to the client
-		if(sizeof(int) != send(csock, &length, sizeof(int), 0))
-		{
-			printf("[bank] fail to send packet length\n");
-			break;
-		}
-		if(length != send(csock, (void*)packet, length, 0))
-		{
-			printf("[bank] fail to send packet\n");
-			break;
-		}
+        processed = process_packet(&incoming, &outgoing);
+        
+        if(!processed)
+            printf("[bank] invalid action occured\n")
+        
+		// put new data in packet
+        bank_send(&outgoing, csock);
 
 	}
 
@@ -137,6 +187,58 @@ void* client_thread(void* arg)
 	return NULL;
 }
 
+bool process_packet(ATM_to_server * incoming, server_to_ATM * outgoing)
+{
+
+    // For geffory
+    
+    // Your newly recieved data:
+    // incoming->action            == 0-3?
+    // incoming->amount            == Used after auth
+    // incoming->pin               == Only used during auth
+    // (incoming->accounts & 0x0F) == Source Account
+    // (incoming->accounts >> 4)   == Destination Account
+    // incoming->session_token     == Session token
+    // incoming->transaction_num   == Action counter
+    // incoming->pin
+    
+    // Outgoing data:
+    // outgoing->message           == I have no idea, ask austin
+    // outgoing->session_token     == Session token, should be the same as incoming
+    // outgoing->transaction_num   == Get it from incoming, and increment
+    
+    bool result = false;
+    
+    outgoing->transaction_num = incoming->transaction_num + 1;
+    outgoing->session_token = incoming_session_token;
+    
+    // kill the session or something if the counter rolls over
+    if(outgoing->transaction_num == 0)
+    {
+        outgoing->session_token = 0;
+        return result;
+    }
+    
+    // do your account actions here
+    switch(incoming->action)
+    {
+        case 0:
+            break;
+        case 1:
+            break;
+        case 2:
+            break;
+        case 3:
+            break;
+            
+        default:
+            abort();
+    }
+    
+    return result;
+}
+
+/*
 void* console_thread(void* arg)
 {
 	char buf[80];
@@ -149,6 +251,7 @@ void* console_thread(void* arg)
 		//TODO: your input parsing code has to go here
 	}
 }
+*/
 
 bool deposit_amount(const uint8_t id, const uint64_t amount)
 {

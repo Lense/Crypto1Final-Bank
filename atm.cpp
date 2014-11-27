@@ -58,6 +58,7 @@ server_to_ATM encrypt_and_send(ATM_to_server msg, int sock)
 		abort();
 	}
 
+    /* XXX: are structs dynamically allocated in C++?!? */
 	server_to_ATM rec;
 	memcpy(&rec, rec_string, length);
 	return rec;
@@ -455,11 +456,16 @@ ATM_to_server authenticate_credentials()
 		printf("failed to get high-quality randomness\n");
 		abort();
 	}
-	uint64_t session_token;
+	
+    /* XXX: shouldn't this be on the bank side? maybe send a static token for auth */
+    uint64_t session_token;
 	if(!memcpy(&session_token, rand_str, 8))
 		abort();
 
 	// auth struct to be returned
+    /* XXX: are structs dynamically allocated in C++?!? Or is this on the stack?
+       because we return this and attempt to dereference this crap in another func */
+       
 	ATM_to_server auth = {
 		0, // Action login
 		(uint8_t)(account_number << 4),
@@ -469,7 +475,7 @@ ATM_to_server authenticate_credentials()
 	};
 
 	// Cleanup
-	unpost_form(my_form); // weird segfaults here but I guess they went away ???
+	unpost_form(my_form); // XXX: weird segfaults here but I guess they went away ???
 	free_form(my_form);
 	free_field(field[0]);
 	free_field(field[1]);
