@@ -18,12 +18,6 @@
 
 server_to_ATM encrypt_and_send(ATM_to_server msg, int sock)
 {
-	 /*
-	  * TODO here:
-	  *  test msg
-	  *  check valid return
-	  */
-
 	int length = 16;
 	unsigned char msg_string[length+1];
 	memcpy(msg_string, &msg, length-1);
@@ -61,7 +55,7 @@ server_to_ATM encrypt_and_send(ATM_to_server msg, int sock)
 	}
 
 	server_to_ATM rec;
-	memcpy(&rec, rec_string, length);
+	memcpy(&rec, rec_string, length-1);
 	//printf("received packet %s %" PRIu64 " %u\n", rec.message, rec.session_token, rec.transaction_num); //FIXME remove this
 
 	// Test session token and session transaction number
@@ -79,18 +73,11 @@ server_to_ATM encrypt_and_send(ATM_to_server msg, int sock)
 		}
 	}
 	// Bank might have disconnected here but that's ok because we check for that in caller
-
 	return rec;
 }
 
-void input_loop(int sock, ATM_to_server auth, server_to_ATM initial_rec)
+void input_loop(int sock, ATM_to_server auth)
 {
-	/*
-	 * TODO here:
-	 *  test values set and received more
-	 */
-
-
 	// Begin boilerplate
 	FIELD* action_field[2];
 	FIELD* withdraw_field[2];
@@ -114,7 +101,6 @@ void input_loop(int sock, ATM_to_server auth, server_to_ATM initial_rec)
 	const char* valid_account_names[3] = {"Alice", "Bob", "Eve"};
 
 	int logged_in = 1;
-	mvprintw(14, 10, "Received \"%s\" from bank", initial_rec.message);
 	while(logged_in)
 	{
 
@@ -168,7 +154,6 @@ void input_loop(int sock, ATM_to_server auth, server_to_ATM initial_rec)
 									if(field_buffer(action_field[0],0)[0]!=' ')
 									{
 										fields_entered = 1;
-										//mvprintw(14, 10, "selected action");
 									}
 									else
 									{
@@ -271,14 +256,14 @@ void input_loop(int sock, ATM_to_server auth, server_to_ATM initial_rec)
 							mvprintw(9, 10, "invalid field");
 							break;
 						case E_REQUEST_DENIED:
-							mvprintw(9, 10, "invalid field");
+							mvprintw(9, 10, "request denied");
 							break;
 						case E_SYSTEM_ERROR:
 							mvprintw(9, 10, "system error");
 							break;
 						default:
 							mvprintw(9, 10, "something else");
-							break;
+							abort();
 					}
 				default:
 					form_driver(cur_form, ch);
@@ -325,7 +310,6 @@ void input_loop(int sock, ATM_to_server auth, server_to_ATM initial_rec)
 		};
 		server_to_ATM rec = encrypt_and_send(msg, sock);
 
-		// TODO error check rec here
 		if(rec.transaction_num == 0xFF && strncmp(rec.message, "disc", 4) == 0)
 		{
 			mvprintw(14, 10, "The bank has terminated your session");
@@ -354,12 +338,6 @@ void input_loop(int sock, ATM_to_server auth, server_to_ATM initial_rec)
 
 ATM_to_server authenticate_credentials()
 {
-	/*
-	 * TODO here (minor improvements):
-	 *  add more usage info
-	 *  make prettier
-	 */
-
 	FIELD *field[3];
 	FORM  *my_form;
 	int ch;
@@ -373,7 +351,6 @@ ATM_to_server authenticate_credentials()
 	init_pair(1, COLOR_GREEN, COLOR_BLACK);
 	attron(COLOR_PAIR(1));
 
-	//FIELD *new_field(int height, int width, int toprow, int leftcol, int offscreen, int nbuffers);
 	field[0] = new_field(1, 5, 4, 24, 0, 0);
 	field[1] = new_field(1, 10, 6, 24, 0, 0);
 	field[2] = NULL;
@@ -478,10 +455,18 @@ ATM_to_server authenticate_credentials()
 			abort();
 	}
 	if(!card_file)
+	{
+		printf("Bad atm card\n");
 		abort();
-	int account_number;
-	if(fscanf(card_file, "%d", &account_number) != 1)
+	}
+	uint8_t account_number;
+	if(fscanf(card_file, "%" SCNu8, &account_number) != 1)
 		abort();
+	if(account_number > 2)
+	{
+		printf("Bad atm card\n");
+		abort();
+	}
 	fclose(card_file);
 
 	// Get random session token
@@ -558,8 +543,7 @@ int main(int argc, char* argv[])
 		abort();
 	}
 	fflush(0);
-	system(""); // It segfaults without this. Your guess is as good as mine.
-	input_loop(sock, auth, rec);
+	input_loop(sock, auth);
 
 	//cleanup
 	close(sock);
