@@ -92,7 +92,6 @@ void input_loop(int sock, ATM_to_server auth, server_to_ATM initial_rec)
 	 */
 
 
-
 	// Begin boilerplate
 	FIELD* action_field[2];
 	FIELD* withdraw_field[2];
@@ -326,7 +325,16 @@ void input_loop(int sock, ATM_to_server auth, server_to_ATM initial_rec)
 		};
 		server_to_ATM rec = encrypt_and_send(msg, sock);
 		// TODO error check rec here
-		mvprintw(14, 10, "Received \"%s\" from bank", rec.message);
+		if(action==1) // balance
+		{
+			int balance;
+			memcpy(&balance, rec.message, 4);
+			mvprintw(14, 10, "Your balance is \"%d\"", balance);
+		}
+		else
+		{
+			mvprintw(14, 10, "Received \"%s\" from bank", rec.message);
+		}
 		refresh();
 
 		unpost_form(action_form);
@@ -532,6 +540,8 @@ int main(int argc, char* argv[])
 	// Here is where our code starts
 	ATM_to_server auth = authenticate_credentials();
 	server_to_ATM rec = encrypt_and_send(auth, sock);
+	fflush(0);
+	system(""); // It segfaults without this. Your guess is as good as mine.
 	input_loop(sock, auth, rec);
 
 	//cleanup
