@@ -95,8 +95,6 @@ void input_loop(int sock, ATM_to_server auth)
 	// End boilerplate
 
 
-	// FIXME Valgrind says something weird is going on with these,
-	//   but the code seems to work
 	const char* valid_actions[5] = {"balance", "withdraw", "logout", "transfer", NULL};
 	const char* valid_account_names[4] = {"Alice", "Bob", "Eve", NULL};
 
