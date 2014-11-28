@@ -43,7 +43,7 @@ server_to_ATM encrypt_and_send(ATM_to_server msg, int sock)
 		abort();
 	}
 
-	//printf("sent packet %u %u %u %" PRIu64 " %u\n", msg.action, msg.accounts, msg.amount, msg.session_token, msg.transaction_num); //FIXME remove this
+	printf("sent packet %u %u %u %" PRIu64 " %u\n", msg.action, msg.accounts, msg.amount, msg.session_token, msg.transaction_num); //FIXME remove this
 
 	// Receive packet
 	if(length != recv(sock, packet, length, MSG_WAITALL))
@@ -62,7 +62,7 @@ server_to_ATM encrypt_and_send(ATM_to_server msg, int sock)
 
 	server_to_ATM rec;
 	memcpy(&rec, rec_string, length);
-	//printf("received packet %s %" PRIu64 " %u\n", rec.message, rmessageec.session_token, rec.transaction_num); //FIXME remove this
+	printf("received packet %s %" PRIu64 " %u\n", rec.message, rec.session_token, rec.transaction_num); //FIXME remove this
 
 	// Test session token and session transaction number
 	if(msg.session_token != rec.session_token)
@@ -70,16 +70,15 @@ server_to_ATM encrypt_and_send(ATM_to_server msg, int sock)
 		printf("\nPossible spoofing detected with session token\n");
 		abort();
 	}
-    if(rec.transaction_num == 0xFF && strncmp(rec.message, "disc", 4) == 0)
-    {
-        printf("\nBank sent disconnect for previous action\n");
-		abort();
-    }
-	if(msg.transaction_num+1 != rec.transaction_num)
+	if(rec.transaction_num != 0xFF || strncmp(rec.message, "disc", 4) != 0)
 	{
-		printf("\nPossible spoofing detected with transaction number\n");
-		abort();
+		if(msg.transaction_num+1 != rec.transaction_num)
+		{
+			printf("\nPossible spoofing detected with transaction number\n");
+			abort();
+		}
 	}
+	// Bank might have disconnected here but that's ok because we check for that in caller
 
 	return rec;
 }
@@ -247,7 +246,8 @@ void input_loop(int sock, ATM_to_server auth, server_to_ATM initial_rec)
 									switch(action)
 									{
 										case 2: // withdraw
-											if(field_buffer(withdraw_field[0],0)[0]!=' ')
+											if(field_buffer(withdraw_field[0],0)[0]!=' ' \
+												&& field_buffer(withdraw_field[0],0)[0]!='-')
 												loop = 0;
 											break;
 										case 4: // transfer
@@ -316,7 +316,7 @@ void input_loop(int sock, ATM_to_server auth, server_to_ATM initial_rec)
 		}
 		else if(action == 2) // withdraw
 		{
-			amount = (uint8_t)atoi(field_buffer(withdraw_field[0], 0));
+			amount = (uint32_t)atoi(field_buffer(withdraw_field[0], 0));
 			free_field(withdraw_field[0]);
 			unpost_form(withdraw_form);
 			free_form(withdraw_form);
@@ -329,8 +329,14 @@ void input_loop(int sock, ATM_to_server auth, server_to_ATM initial_rec)
 			0 // Session transaction number
 		};
 		server_to_ATM rec = encrypt_and_send(msg, sock);
+
 		// TODO error check rec here
-		if(action==1) // balance
+		if(rec.transaction_num == 0xFF && strncmp(rec.message, "disc", 4) == 0)
+		{
+			mvprintw(14, 10, "The bank has terminated your session");
+			logged_in = 0;
+		}
+		else if(action==1) // balance
 		{
 			int balance;
 			memcpy(&balance, rec.message, 4);
@@ -493,9 +499,9 @@ ATM_to_server authenticate_credentials()
 	if(!memcpy(&session_token, rand_str, 8))
 		abort();
 
-    // atoi does not parse past INT_MAX, must use sscanf
-    uint32_t pin = 0;
-    sscanf(field_buffer(field[1], 0), "%u", &pin);
+	// atoi does not parse past INT_MAX, must use sscanf
+	uint32_t pin = 0;
+	sscanf(field_buffer(field[1], 0), "%u", &pin);
 
 	// auth struct to be returned
 	ATM_to_server auth = {
@@ -549,6 +555,11 @@ int main(int argc, char* argv[])
 	// Here is where our code starts
 	ATM_to_server auth = authenticate_credentials();
 	server_to_ATM rec = encrypt_and_send(auth, sock);
+	if(rec.transaction_num == 0xFF && strncmp(rec.message, "disc", 4) == 0)
+	{
+		printf("Failed to authenticate\n");
+		abort();
+	}
 	fflush(0);
 	system(""); // It segfaults without this. Your guess is as good as mine.
 	input_loop(sock, auth, rec);

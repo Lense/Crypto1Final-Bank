@@ -135,7 +135,11 @@ void* client_thread(void* arg)
     acc_num = incoming.accounts >> 4;
     
     // if no active session, save token and send good response
-    if(acc_num < 3 && bank_sessions[acc_num] == 0)
+    if(acc_num >= 3 || acc_num < 0)
+        printf("[bank] Auth: invalid account (%u)\n", acc_num);
+	else if(bank_sessions[acc_num] != 0)
+        printf("[bank] Auth: an active sessions exists for account (%u)\n", acc_num);
+	else
     {    
         // save session token
         bank_sessions[acc_num] = incoming.session_token;
@@ -161,8 +165,6 @@ void* client_thread(void* arg)
             printf("[bank] Auth: invalid PIN (%u) against stored (%u)\n", incoming.pin, bank_accounts[acc_num].pin);
         }
     }
-    else
-        printf("[bank] Auth: invalid account (%u) or an active sessions exists\n", acc_num);
         
     // main command loop
     while(valid & authenticated)
@@ -179,7 +181,6 @@ void* client_thread(void* arg)
         // Make the transaction
         valid = process_packet(&incoming, &outgoing);
         printf("[bank] Thread: processed packet\n");
-        
     }
 
     // clear session token if this connection ever authenticated
@@ -189,8 +190,10 @@ void* client_thread(void* arg)
     
     // construct disconnect packet
     strncpy(outgoing.message, "disc", 4);
-    outgoing.session_token = 0;
+    //outgoing.session_token = 0;
     outgoing.transaction_num = 0xFF;
+    outgoing.session_token = incoming.session_token;
+    //outgoing.transaction_num = incoming.transaction_num+1;
     
     // goodbye!
     encrypt_and_send(&outgoing, csock, acc_num);
