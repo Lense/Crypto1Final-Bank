@@ -4,12 +4,13 @@ typedef struct
 {
 	uint8_t id;
 	uint32_t pin;
-	uint64_t balance;
+	uint32_t balance;
+    char name[6];
 } Account;
 
 typedef struct __attribute__((__packed__))
 {
-	uint8_t message[6];
+	char message[6];
 	uint64_t session_token;
 	uint8_t transaction_num;
 } server_to_ATM;

@@ -67,12 +67,17 @@ server_to_ATM encrypt_and_send(ATM_to_server msg, int sock)
 	// Test session token and session transaction number
 	if(msg.session_token != rec.session_token)
 	{
-		printf("Possible spoofing detected with session token\n");
+		printf("\nPossible spoofing detected with session token\n");
 		abort();
 	}
+    if(rec.transaction_num == 0xFF && strncmp(rec.message, "disc", 4) == 0)
+    {
+        printf("\nBank sent disconnect for previous action\n");
+		abort();
+    }
 	if(msg.transaction_num+1 != rec.transaction_num)
 	{
-		printf("Possible spoofing detected with transaction number\n");
+		printf("\nPossible spoofing detected with transaction number\n");
 		abort();
 	}
 
@@ -285,7 +290,7 @@ void input_loop(int sock, ATM_to_server auth, server_to_ATM initial_rec)
 					break;
 			}
 		}
-		uint8_t account_dst = -1;
+		uint8_t account_dst = 0;
 		uint8_t amount = 0;
 		if(action == 4) // transfer
 		{
@@ -381,7 +386,7 @@ ATM_to_server authenticate_credentials()
 		abort();
 	const char* valid_account_names[3] = {"Alice", "Bob", "Eve"};
 	set_field_type(field[0], TYPE_ENUM, valid_account_names, 0, 0);
-	set_field_type(field[1], TYPE_INTEGER, 0, 1, 0xfffffffe);
+	set_field_type(field[1], TYPE_NUMERIC, 0, 1, 0xfffffffe);
 
 	my_form = new_form(field);
 	post_form(my_form);
@@ -488,11 +493,15 @@ ATM_to_server authenticate_credentials()
 	if(!memcpy(&session_token, rand_str, 8))
 		abort();
 
+    // atoi does not parse past INT_MAX, must use sscanf
+    uint32_t pin = 0;
+    sscanf(field_buffer(field[1], 0), "%u", &pin);
+
 	// auth struct to be returned
 	ATM_to_server auth = {
 		0, // Action login
 		(uint8_t)(account_number << 4),
-		(uint32_t)atoi(field_buffer(field[1], 0)), // PIN
+		pin, // PIN
 		session_token,
 		0
 	};
