@@ -58,9 +58,21 @@ server_to_ATM encrypt_and_send(ATM_to_server msg, int sock)
 		abort();
 	}
 
-    /* XXX: are structs dynamically allocated in C++?!? */
 	server_to_ATM rec;
 	memcpy(&rec, rec_string, length);
+
+	// Test session token and session transaction number
+	if(msg.session_token != rec.session_token)
+	{
+		printf("Possible spoofing detected\n");
+		abort();
+	}
+	if(msg.transaction_num+1 != rec.transaction_num)
+	{
+		printf("Possible spoofing detected\n");
+		abort();
+	}
+
 	return rec;
 }
 
@@ -95,11 +107,13 @@ void input_loop(int sock, ATM_to_server auth, server_to_ATM initial_rec)
 	// End boilerplate
 
 
-	// Something weird is going on with these, but the code seems to work
+	// FIXME Valgrind says something weird is going on with these,
+	//   but the code seems to work
 	const char* valid_actions[4] = {"balance", "withdraw", "logout", "transfer"};
 	const char* valid_account_names[3] = {"Alice", "Bob", "Eve"};
 
 	int logged_in = 1;
+	mvprintw(14, 10, "Received \"%s\" from bank", initial_rec.message);
 	while(logged_in)
 	{
 
@@ -131,6 +145,7 @@ void input_loop(int sock, ATM_to_server auth, server_to_ATM initial_rec)
 				form_driver(cur_form, REQ_VALIDATION);
 				case KEY_DOWN:
 				case 0x9:
+				case ' ':
 					form_driver(cur_form, REQ_NEXT_FIELD);
 					form_driver(cur_form, REQ_END_LINE);
 					break;
@@ -376,6 +391,7 @@ ATM_to_server authenticate_credentials()
 			form_driver(my_form, REQ_VALIDATION);
 			case KEY_DOWN:
 			case 0x9:
+			case ' ':
 				form_driver(my_form, REQ_NEXT_FIELD);
 				form_driver(my_form, REQ_END_LINE);
 				break;
@@ -457,15 +473,11 @@ ATM_to_server authenticate_credentials()
 		abort();
 	}
 	
-    /* XXX: shouldn't this be on the bank side? maybe send a static token for auth */
-    uint64_t session_token;
+	uint64_t session_token;
 	if(!memcpy(&session_token, rand_str, 8))
 		abort();
 
 	// auth struct to be returned
-    /* XXX: are structs dynamically allocated in C++?!? Or is this on the stack?
-       because we return this and attempt to dereference this crap in another func */
-       
 	ATM_to_server auth = {
 		0, // Action login
 		(uint8_t)(account_number << 4),
@@ -475,7 +487,7 @@ ATM_to_server authenticate_credentials()
 	};
 
 	// Cleanup
-	unpost_form(my_form); // XXX: weird segfaults here but I guess they went away ???
+	unpost_form(my_form);
 	free_form(my_form);
 	free_field(field[0]);
 	free_field(field[1]);
