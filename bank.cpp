@@ -29,6 +29,7 @@ void* console_thread(void* arg);
 ATM_to_server receive_and_decrypt(int sock);
 void encrypt_and_send(server_to_ATM msg, int sock);
 server_to_ATM process_packet(ATM_to_server incoming, server_to_ATM prev_sent);
+uint64_t return_balance(const uint8_t id);
 bool deposit_amount(const uint8_t id, const uint64_t amount);
 bool withdraw_amount(const uint8_t id, const uint64_t amount);
 bool transfer_amount(const uint8_t id, const uint64_t amount, const uint8_t id2);
@@ -206,28 +207,27 @@ void encrypt_and_send(server_to_ATM msg, int sock)
 server_to_ATM process_packet(ATM_to_server incoming, server_to_ATM prev_sent)
 {
 	server_to_ATM outgoing;
-	bool result;
-
-	// TODO check for transaction number rollover
 	int src = incoming.accounts & 0x0F;
 	int dest = incoming.accounts >> 4;
 
+	// TODO check for transaction number rollover
 	outgoing.transaction_num = incoming.transaction_num + 1;
 	outgoing.session_token = incoming.session_token;
 
 	// TODO check session tokens and transaction numbers
-	/*
 	if(bank_sessions[src] == incoming.session_token && (prev_sent.transaction_num)+2 != outgoing.transaction_num) 
 	{
-		
+		outgoing.session_token = 0;
+		server_to_ATM bad_packet = {"invlg", outgoing.session_token, outgoing.transaction_num};
+		return bad_packet;
 	}
-	*/
 
-	// kill the session or something if the counter rolls over
+	// FIXME kill the session or something if the counter rolls over
 	if(outgoing.transaction_num == 0)
 	{
 		outgoing.session_token = 0;
-		//return result;
+		server_to_ATM bad_packet = {"invlg", outgoing.session_token, outgoing.transaction_num};
+		return bad_packet;
 	}
 
 	// TODO process things
@@ -237,7 +237,6 @@ server_to_ATM process_packet(ATM_to_server incoming, server_to_ATM prev_sent)
 			if(bank_sessions[src] == incoming.session_token) // Check session token
 			{
 				// FIXME sprintf(outgoing.message, "%d", return_balance(src));
-				result = true;
 			}
 			break;
 		case 2:
@@ -245,8 +244,7 @@ server_to_ATM process_packet(ATM_to_server incoming, server_to_ATM prev_sent)
 			{
 				if(withdraw_amount(src, incoming.amount))
 				{
-					// FIXME sprintf(outgoing.message, "%d", return_balance(src)); // Return new balance if withdrawal successful
-					result = true;
+					//sprintf(outgoing.message, "%d", return_balance(src)); // Return new balance if withdrawal successful
 				}
 			}	
 			break;
@@ -254,7 +252,6 @@ server_to_ATM process_packet(ATM_to_server incoming, server_to_ATM prev_sent)
 			if(bank_sessions[src] == incoming.session_token) // Check session token
 			{
 				bank_sessions[src] = 0; // Logout
-				result = true;
 			}
 			break;
 		case 4:
@@ -263,7 +260,6 @@ server_to_ATM process_packet(ATM_to_server incoming, server_to_ATM prev_sent)
 				if(transfer_amount(src, incoming.amount, dest))
 				{
 					// FIXME sprintf(outgoing.message, "%d", return_balance(src)); // Return new balance if transfer successful
-					result = true;
 				}
 			}
 			break;
@@ -290,6 +286,11 @@ void* console_thread(void* arg)
 
 		//TODO: your input parsing code has to go here
 	}
+}
+
+uint64_t return_balance(const uint8_t id)
+{
+	return bank_accounts[id].balance;
 }
 
 bool deposit_amount(const uint8_t id, const uint64_t amount)
