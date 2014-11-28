@@ -6,6 +6,7 @@ The ATM sends a request to the bank, which processes the transaction and sends a
 To force disconnect from the server, send a packet with a transaction number of 255 and a message of "disc".
 ##Usage
 ####Setup
+Acquire openssl and ncurses libraries.
 Make sure your account has an atm card. The cards are included.
 ####ATM usage
 Fill in each field, using space or tab to go to the next field.
