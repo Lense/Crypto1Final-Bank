@@ -156,6 +156,10 @@ void* client_thread(void* arg)
             printf("[bank] Auth: user %s authenticated\n", bank_accounts[acc_num].name);
             authenticated = true;
         }
+        else
+        {
+            bank_sessions[acc_num] = 0;
+        }
         
         /* because we've set a session token, this will prevent a pin
            bruteforce across all threads for this account (: */
