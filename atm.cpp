@@ -43,7 +43,7 @@ server_to_ATM encrypt_and_send(ATM_to_server msg, int sock)
 		abort();
 	}
 
-	printf("sent packet %u %u %u %" PRIu64 " %u\n", msg.action, msg.accounts, msg.amount, msg.session_token, msg.transaction_num); //FIXME remove this
+	//printf("sent packet %u %u %u %" PRIu64 " %u\n", msg.action, msg.accounts, msg.amount, msg.session_token, msg.transaction_num); //FIXME remove this
 
 	// Receive packet
 	if(length != recv(sock, packet, length, MSG_WAITALL))
@@ -62,7 +62,7 @@ server_to_ATM encrypt_and_send(ATM_to_server msg, int sock)
 
 	server_to_ATM rec;
 	memcpy(&rec, rec_string, length);
-	printf("received packet %s %" PRIu64 " %u\n", rec.message, rec.session_token, rec.transaction_num); //FIXME remove this
+	//printf("received packet %s %" PRIu64 " %u\n", rec.message, rec.session_token, rec.transaction_num); //FIXME remove this
 
 	// Test session token and session transaction number
 	if(msg.session_token != rec.session_token)
@@ -87,12 +87,7 @@ void input_loop(int sock, ATM_to_server auth, server_to_ATM initial_rec)
 {
 	/*
 	 * TODO here:
-	 *  *bugtest*
-	 *  move labels around so they don't overlap
-	 *  make the forms align
-	 *  test values set and received
-	 *  show what was sent by server
-	 *  BIG ONE: implement session tokens and session transaction number
+	 *  test values set and received more
 	 */
 
 
@@ -133,7 +128,6 @@ void input_loop(int sock, ATM_to_server auth, server_to_ATM initial_rec)
 		action_form = new_form(action_field);
 		cur_form = action_form;
 		post_form(action_form);
-		refresh();
 
 		// Prompt
 		mvprintw(4, 10, "action:");
@@ -174,7 +168,7 @@ void input_loop(int sock, ATM_to_server auth, server_to_ATM initial_rec)
 									if(field_buffer(action_field[0],0)[0]!=' ')
 									{
 										fields_entered = 1;
-										mvprintw(14, 10, "selected action");
+										//mvprintw(14, 10, "selected action");
 									}
 									else
 									{
@@ -246,13 +240,14 @@ void input_loop(int sock, ATM_to_server auth, server_to_ATM initial_rec)
 									switch(action)
 									{
 										case 2: // withdraw
-											if(field_buffer(withdraw_field[0],0)[0]!=' ' \
-												&& field_buffer(withdraw_field[0],0)[0]!='-')
+											if(field_buffer(withdraw_field[0],0)[0]!=' ' && \
+												field_buffer(withdraw_field[0],0)[0]!='-')
 												loop = 0;
 											break;
 										case 4: // transfer
 											if(field_buffer(transfer_field[0],0)[0]!=' ' && \
-													field_buffer(transfer_field[1],0)[0]!=' ')
+													field_buffer(transfer_field[1],0)[0]!=' ' && \
+													field_buffer(withdraw_field[1],0)[0]!='-')
 												loop = 0;
 											break;
 										default:
@@ -264,25 +259,25 @@ void input_loop(int sock, ATM_to_server auth, server_to_ATM initial_rec)
 							}
 							break;
 						case E_BAD_ARGUMENT:
-							mvprintw(8, 10, "bad argument");
+							mvprintw(9, 10, "bad argument");
 							break;
 						case E_BAD_STATE:
-							mvprintw(8, 10, "bad state");
+							mvprintw(9, 10, "bad state");
 							break;
 						case E_NOT_POSTED:
-							mvprintw(8, 10, "not posted");
+							mvprintw(9, 10, "not posted");
 							break;
 						case E_INVALID_FIELD:
-							mvprintw(8, 10, "invalid field");
+							mvprintw(9, 10, "invalid field");
 							break;
 						case E_REQUEST_DENIED:
-							mvprintw(8, 10, "invalid field");
+							mvprintw(9, 10, "invalid field");
 							break;
 						case E_SYSTEM_ERROR:
-							mvprintw(8, 10, "system error");
+							mvprintw(9, 10, "system error");
 							break;
 						default:
-							mvprintw(8, 10, "something else");
+							mvprintw(9, 10, "something else");
 							break;
 					}
 				default:
@@ -336,17 +331,19 @@ void input_loop(int sock, ATM_to_server auth, server_to_ATM initial_rec)
 			mvprintw(14, 10, "The bank has terminated your session");
 			logged_in = 0;
 		}
-		else if(action==1) // balance
+		else if(action==1 || action == 2 || action == 4) // balance
 		{
-			int balance;
+			uint32_t balance;
 			memcpy(&balance, rec.message, 4);
-			mvprintw(14, 10, "Your balance is \"%d\"", balance);
+			mvprintw(15, 10, "Your balance is \"%u\"", balance);
 		}
 		else
 		{
 			mvprintw(14, 10, "Received \"%s\" from bank", rec.message);
 		}
 		refresh();
+
+		sleep(2);
 
 		unpost_form(action_form);
 		free_form(action_form);

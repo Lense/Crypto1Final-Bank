@@ -137,9 +137,9 @@ void* client_thread(void* arg)
     // if no active session, save token and send good response
     if(acc_num >= 3 || acc_num < 0)
         printf("[bank] Auth: invalid account (%u)\n", acc_num);
-	else if(bank_sessions[acc_num] != 0)
+    else if(bank_sessions[acc_num] != 0)
         printf("[bank] Auth: an active sessions exists for account (%u)\n", acc_num);
-	else
+    else
     {    
         // save session token
         bank_sessions[acc_num] = incoming.session_token;
