@@ -19,7 +19,10 @@ Account bank_accounts[] = {
 	{0, 3141592653LL, 100},
 	{1, 1619033988LL, 50},
 	{2, 2718281828LL, 0}
-};
+}
+
+// Declare sessions
+uint64_t bank_sessions[3] = { 0 };
 
 void* client_thread(void* arg);
 void* console_thread(void* arg);
@@ -192,21 +195,75 @@ void encrypt_and_send(server_to_ATM msg, int sock)
 
 server_to_ATM process_packet(ATM_to_server incoming, server_to_ATM prev_sent)
 {
-	// TODO check session tokens and transaction numbers
+	server_to_ATM outgoing;
 
 	// TODO check for transaction number rollover
+	int src = incoming.accounts & 0x0F;
+  int dest = incoming.accounts >> 4;
+
+  outgoing.transaction_num = incoming.transaction_num + 1;
+  outgoing.session_token = incoming_session_token;
+  
+  // TODO check session tokens and transaction numbers
+	if(bank_sessions[src] == incoming_session_token && (server_to_ATM prev_sent.transaction_num)+2 != outgoing.transaction_num) 
+	{
+		
+	}
+    
+	 // kill the session or something if the counter rolls over
+   if(outgoing.transaction_num == 0)
+   {
+      outgoing.session_token = 0;
+      //return result;
+   }
 
 	// TODO process things
 	switch(incoming.action)
 	{
-		case 0:
-			break;
-		case 1:
-			break;
-		case 2:
-			break;
-		case 3:
-			break;
+    case 0:
+     	if(src >= 0 && src < 3)
+      {
+       	if(bank_sessions[src] == 0)
+        {
+        		// Assign session token to account
+        		bank_sessions[src] = incoming_session_token;
+         } 
+      }
+      break;
+    case 1:
+      if(bank_sessions[src] == incoming_session_token) // Check session token
+      {
+        sprintf(outgoing.message, "%d", return_balance(src));
+        result = true;
+      }
+      break;
+    case 2:
+      if(bank_sessions[src] == incoming_session_token) // Check session token
+      {
+        if(withdraw_amount(src, incoming.amount))
+        {
+        	sprintf(outgoing.message, "%d", return_balance(src)); // Return new balance if withdrawal successful
+        	result = true;
+        }
+      }	
+      break;
+    case 3:
+      if(bank_sessions[src] == incoming_session_token) // Check session token
+      {
+        bank_sessions[src] = 0; // Logout
+        result = true;
+      }
+    	break;
+    case 4:
+      if(bank_sessions[src] == incoming_session_token) // Check session token
+      {	
+        if(transfer_amount(src, incoming.amount, dest))
+        {
+        	sprintf(outgoing.message, "%d", return_balance(src)); // Return new balance if transfer successful
+        	result = true;
+        }
+      }
+      break;
 
 		default:
 			pthread_exit(0);
