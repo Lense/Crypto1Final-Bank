@@ -7,14 +7,14 @@ typedef struct
 	uint64_t balance;
 } Account;
 
-typedef struct
+typedef struct __attribute__((__packed__))
 {
 	uint8_t message[6];
 	uint64_t session_token;
 	uint8_t transaction_num;
 } server_to_ATM;
 
-typedef struct
+typedef struct __attribute__((__packed__))
 {
 	uint8_t action;
 	uint8_t accounts;
