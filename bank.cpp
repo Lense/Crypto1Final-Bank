@@ -281,7 +281,7 @@ bool process_packet(ATM_to_server * incoming, server_to_ATM * outgoing, const ui
     }
     
     // check for transaction number rollover
-    if(incoming->transaction_num + 1 == 0)
+    if(incoming->transaction_num + 1 == 0 || incoming->transaction_num + 1 == 0xFF)
     {
         printf("[bank] cmd: Transaction limit hit for this session\n");
         return false;
