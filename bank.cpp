@@ -138,21 +138,24 @@ ATM_to_server receive_and_decrypt(int sock)
 	unsigned char packet[17];
 
 	// Receive packet
-	printf("len %d\n", recv(sock, packet, length, 0));
-	/*
-	if(length != recv(sock, packet, length, 0))
+	if(length != recv(sock, packet, length, MSG_WAITALL))
 	{
 		printf("fail to read packet\n");
-		abort();
+		pthread_exit(0);
 	}
-	*/
 
 	unsigned char rec_string[17];
 	// Decrypt packet into message
-	if(symmetric_decrypt(packet, rec_string) != length)
+	int decrypted_length = symmetric_decrypt(packet, rec_string);
+	// FIXME make sure this is ok
+	if(decrypted_length != length && decrypted_length != length-1)
 	{
 		printf("failed to decrypt message\n");
-		abort();
+		/*
+		for(int i=0; i<17; i++)
+			printf("%x\n", rec_string[i]);
+			*/
+		pthread_exit(0);
 	}
 
 	ATM_to_server rec;
@@ -176,14 +179,14 @@ void encrypt_and_send(server_to_ATM msg, int sock)
 	if(symmetric_encrypt(msg_string, packet) != length)
 	{
 		printf("failed to encrypt message\n");
-		abort();
+		pthread_exit(0);
 	}
 
 	// Send packet through the proxy to the atm
 	if(length != send(sock, (void*)packet, length, 0))
 	{
 		printf("fail to send packet\n");
-		abort();
+		pthread_exit(0);
 	}
 }
 
@@ -206,7 +209,7 @@ server_to_ATM process_packet(ATM_to_server incoming, server_to_ATM prev_sent)
 			break;
 
 		default:
-			abort();
+			pthread_exit(0);
 	}
 	server_to_ATM to_send = {
 		"sampl",

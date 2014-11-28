@@ -37,14 +37,16 @@ server_to_ATM encrypt_and_send(ATM_to_server msg, int sock)
 	}
 
 	// Send packet through the proxy to the bank
-	if(length != send(sock, (void*)packet, length, 0))
+	if(send(sock, (void*)packet, length, 0) != length)
 	{
 		printf("fail to send packet\n");
 		abort();
 	}
 
+	printf("sent packet\n"); // FIXME remove this
+
 	// Receive packet
-	if(length != recv(sock, packet, length, 0))
+	if(length != recv(sock, packet, length, MSG_WAITALL))
 	{
 		printf("fail to read packet\n");
 		abort();
