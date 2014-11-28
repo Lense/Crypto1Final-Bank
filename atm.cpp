@@ -232,7 +232,7 @@ void input_loop(int sock, ATM_to_server auth)
 										case 4: // transfer
 											if(field_buffer(transfer_field[0],0)[0]!=' ' && \
 													field_buffer(transfer_field[1],0)[0]!=' ' && \
-													field_buffer(withdraw_field[1],0)[0]!='-')
+													field_buffer(transfer_field[1],0)[0]!='-')
 												loop = 0;
 											break;
 										default:
