@@ -158,13 +158,10 @@ void* client_thread(void* arg)
         }
         else
         {
-            bank_sessions[acc_num] = 0;
-        }
-        
         /* because we've set a session token, this will prevent a pin
            bruteforce across all threads for this account (: */
-        else
-        {
+			authenticated = false; // Doesn't hurt to be redundant
+            bank_sessions[acc_num] = 0;
             sleep(3);
             printf("[bank] Auth: invalid PIN (%u) against stored (%u)\n", incoming.pin, bank_accounts[acc_num].pin);
         }
