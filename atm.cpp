@@ -364,7 +364,7 @@ ATM_to_server authenticate_credentials()
 	field_opts_on(field[1], O_STATIC);
 	if(field_opts_on(field[1], O_NULLOK) != E_OK)
 		abort();
-	const char* valid_account_names[3] = {"Alice", "Bob", "Eve"};
+	const char* valid_account_names[3] = {"Alice", "Bob", "Eve", NULL};
 	set_field_type(field[0], TYPE_ENUM, valid_account_names, 0, 0);
 	set_field_type(field[1], TYPE_NUMERIC, 0, 1, 0xfffffffe);
 
