@@ -34,7 +34,7 @@ void* console_thread(void* arg);
 void abort_thread(const uint8_t acc_num);
 void receive_and_decrypt(ATM_to_server * msg, int sock, const uint8_t acc_num);
 void encrypt_and_send(server_to_ATM * msg, int sock, const uint8_t acc_num);
-bool process_packet(ATM_to_server * incoming, server_to_ATM * outgoing);
+bool process_packet(ATM_to_server * incoming, server_to_ATM * outgoing, const uint8_t acc_num);
 bool deposit_amount(const uint8_t dest, const uint32_t amount);
 bool withdraw_amount(const uint8_t src, const uint32_t amount);
 bool transfer_amount(const uint8_t src, const uint8_t dest, const uint32_t amount);
@@ -163,7 +163,7 @@ void* client_thread(void* arg)
 			authenticated = false; // Doesn't hurt to be redundant
             bank_sessions[acc_num] = 0;
             sleep(3);
-            printf("[bank] Auth: invalid PIN (%u) against stored (%u)\n", incoming.pin, bank_accounts[acc_num].pin);
+            printf("[bank] Auth: Invalid PIN (%u) against stored PIN\n", incoming.pin);
         }
     }
         
@@ -180,7 +180,7 @@ void* client_thread(void* arg)
         printf("[bank] Thread: got packet\n");
 
         // Make the transaction
-        valid = process_packet(&incoming, &outgoing);
+        valid = process_packet(&incoming, &outgoing, acc_num);
         printf("[bank] Thread: processed packet\n");
     }
 
@@ -252,15 +252,22 @@ void encrypt_and_send(server_to_ATM * msg, int sock, const uint8_t acc_num)
     }
 }
 
-bool process_packet(ATM_to_server * incoming, server_to_ATM * outgoing)
+bool process_packet(ATM_to_server * incoming, server_to_ATM * outgoing, const uint8_t acc_num)
 {
-    int src = incoming->accounts >> 4;
-    int dest = incoming->accounts & 0x0F;
+    uint8_t src = incoming->accounts >> 4;
+    uint8_t dest = incoming->accounts & 0x0F;
 
     // check src and dest accounts are valid
     if(src > 2 or dest > 2)
     {
         printf("[bank] cmd: Invalid account(s) src (%u) dest (%u)\n", src, dest);
+        return false;
+    }
+    
+    // check the src is the actual session for this thread (minor)
+    if(src != acc_num)
+    {
+        printf("[bank] cmd: Packet source account (%u) does not match connection session (%u)\n", src, acc_num);
         return false;
     }
         
