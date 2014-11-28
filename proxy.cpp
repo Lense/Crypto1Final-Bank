@@ -98,17 +98,19 @@ void* client_thread(void* arg)
 	
 	//input loop
 	int length = 16;
-	char packet[1024];
+	char packet[length+1];
 	while(1)
 	{
 		//read the packet from the ATM
-		if(length != recv(csock, packet, length, MSG_WAITALL))
+		int packet_length = recv(csock, packet, length, MSG_WAITALL);
+		if(length != packet_length)
 		{
-			printf("[proxy] fail to read packet from atm\n");
+			printf("[proxy] fail to read packet from atm. Read %d bytes\n", packet_length);
 			break;
 		}
 		
 		//TODO: tamper with packet going from ATM to bank
+		printf("[proxy] forwarding atm packet to bank\n");
 		
 		//forward packet to bank
 		if(length != send(bsock, (void*)packet, length, 0))
@@ -125,6 +127,7 @@ void* client_thread(void* arg)
 		}
 		
 		//TODO: tamper with packet going from bank to ATM
+		printf("[proxy] forwarding bank packet to atm\n");
 
 		//forward packet to ATM
 		if(length != send(csock, (void*)packet, length, 0))

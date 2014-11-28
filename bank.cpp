@@ -19,7 +19,7 @@ Account bank_accounts[] = {
 	{0, 3141592653LL, 100},
 	{1, 1619033988LL, 50},
 	{2, 2718281828LL, 0}
-}
+};
 
 // Declare sessions
 uint64_t bank_sessions[3] = { 0 };
@@ -114,19 +114,34 @@ void* client_thread(void* arg)
 	// TODO:
 	// auth/handshake/session stuff should probably happen out here,
 	// before we go into the main loop...
+	ATM_to_server auth = receive_and_decrypt(csock);
+	if(bank_sessions[auth.accounts >> 4] == 0)
+	{
+		// Assign session token to account
+		bank_sessions[auth.accounts >> 4] = incoming.session_token;
+	}
+	server_to_ATM auth_response = {
+		"auth",
+		auth.session_token,
+		1
+	};
+	encrypt_and_send(auth_response, csock);
+	printf("[bank] user %s authenticated\n", "name");
 
 	while(1)
 	{
 
 		// Get, decrypt, parse, and test packet from atm
 		incoming = receive_and_decrypt(csock);
+		printf("[bank] got packet\n");
 
 		// Make the transaction
 		outgoing = process_packet(incoming, outgoing);
+		printf("[bank] processed packet\n");
 
-		// Encrypt and esnd packet back
+		// Encrypt and send packet back
 		encrypt_and_send(outgoing, csock);
-
+		printf("[bank] sent packet\n");
 	}
 
 	printf("[bank] client ID #%d disconnected\n", csock);
@@ -138,7 +153,7 @@ void* client_thread(void* arg)
 ATM_to_server receive_and_decrypt(int sock)
 {
 	int length = 16;
-	unsigned char packet[17];
+	unsigned char packet[length+1];
 
 	// Receive packet
 	if(length != recv(sock, packet, length, MSG_WAITALL))
@@ -147,22 +162,17 @@ ATM_to_server receive_and_decrypt(int sock)
 		pthread_exit(0);
 	}
 
-	unsigned char rec_string[17];
+	unsigned char rec_string[length+1];
 	// Decrypt packet into message
-	int decrypted_length = symmetric_decrypt(packet, rec_string);
-	// FIXME make sure this is ok
-	if(decrypted_length != length && decrypted_length != length-1)
+	if(symmetric_decrypt(packet, rec_string) != length-1)
 	{
 		printf("failed to decrypt message\n");
-		/*
-		for(int i=0; i<17; i++)
-			printf("%x\n", rec_string[i]);
-			*/
 		pthread_exit(0);
 	}
 
 	ATM_to_server rec;
-	memcpy(&rec, rec_string, length);
+	memcpy(&rec, rec_string, length-1);
+	// TODO check for valid fields
 	return rec;
 }
 
@@ -174,9 +184,9 @@ void encrypt_and_send(server_to_ATM msg, int sock)
 	  */
 
 	int length = 16;
-	unsigned char msg_string[17];
-	memcpy(msg_string, &msg, length);
-	unsigned char packet[17];
+	unsigned char msg_string[length+1];
+	memcpy(msg_string, &msg, length-1);
+	unsigned char packet[length+1];
 
 	// Encrypt message into packet
 	if(symmetric_encrypt(msg_string, packet) != length)
@@ -196,75 +206,67 @@ void encrypt_and_send(server_to_ATM msg, int sock)
 server_to_ATM process_packet(ATM_to_server incoming, server_to_ATM prev_sent)
 {
 	server_to_ATM outgoing;
+	bool result;
 
 	// TODO check for transaction number rollover
 	int src = incoming.accounts & 0x0F;
-  int dest = incoming.accounts >> 4;
+	int dest = incoming.accounts >> 4;
 
-  outgoing.transaction_num = incoming.transaction_num + 1;
-  outgoing.session_token = incoming_session_token;
-  
-  // TODO check session tokens and transaction numbers
-	if(bank_sessions[src] == incoming_session_token && (server_to_ATM prev_sent.transaction_num)+2 != outgoing.transaction_num) 
+	outgoing.transaction_num = incoming.transaction_num + 1;
+	outgoing.session_token = incoming.session_token;
+
+	// TODO check session tokens and transaction numbers
+	/*
+	if(bank_sessions[src] == incoming.session_token && (prev_sent.transaction_num)+2 != outgoing.transaction_num) 
 	{
 		
 	}
-    
-	 // kill the session or something if the counter rolls over
-   if(outgoing.transaction_num == 0)
-   {
-      outgoing.session_token = 0;
-      //return result;
-   }
+	*/
+
+	// kill the session or something if the counter rolls over
+	if(outgoing.transaction_num == 0)
+	{
+		outgoing.session_token = 0;
+		//return result;
+	}
 
 	// TODO process things
 	switch(incoming.action)
 	{
-    case 0:
-     	if(src >= 0 && src < 3)
-      {
-       	if(bank_sessions[src] == 0)
-        {
-        		// Assign session token to account
-        		bank_sessions[src] = incoming_session_token;
-         } 
-      }
-      break;
-    case 1:
-      if(bank_sessions[src] == incoming_session_token) // Check session token
-      {
-        sprintf(outgoing.message, "%d", return_balance(src));
-        result = true;
-      }
-      break;
-    case 2:
-      if(bank_sessions[src] == incoming_session_token) // Check session token
-      {
-        if(withdraw_amount(src, incoming.amount))
-        {
-        	sprintf(outgoing.message, "%d", return_balance(src)); // Return new balance if withdrawal successful
-        	result = true;
-        }
-      }	
-      break;
-    case 3:
-      if(bank_sessions[src] == incoming_session_token) // Check session token
-      {
-        bank_sessions[src] = 0; // Logout
-        result = true;
-      }
-    	break;
-    case 4:
-      if(bank_sessions[src] == incoming_session_token) // Check session token
-      {	
-        if(transfer_amount(src, incoming.amount, dest))
-        {
-        	sprintf(outgoing.message, "%d", return_balance(src)); // Return new balance if transfer successful
-        	result = true;
-        }
-      }
-      break;
-
+		case 1:
+			if(bank_sessions[src] == incoming.session_token) // Check session token
+			{
+				// FIXME sprintf(outgoing.message, "%d", return_balance(src));
+				result = true;
+			}
+			break;
+		case 2:
+			if(bank_sessions[src] == incoming.session_token) // Check session token
+			{
+				if(withdraw_amount(src, incoming.amount))
+				{
+					// FIXME sprintf(outgoing.message, "%d", return_balance(src)); // Return new balance if withdrawal successful
+					result = true;
+				}
+			}	
+			break;
+		case 3:
+			if(bank_sessions[src] == incoming.session_token) // Check session token
+			{
+				bank_sessions[src] = 0; // Logout
+				result = true;
+			}
+			break;
+		case 4:
+			if(bank_sessions[src] == incoming.session_token) // Check session token
+			{	
+				if(transfer_amount(src, incoming.amount, dest))
+				{
+					// FIXME sprintf(outgoing.message, "%d", return_balance(src)); // Return new balance if transfer successful
+					result = true;
+				}
+			}
+			break;
 		default:
 			pthread_exit(0);
 	}

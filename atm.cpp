@@ -12,6 +12,7 @@
 #include <string.h>
 #include <form.h>
 #include <openssl/rand.h>
+#include <inttypes.h>
 #include "structs.h"
 #include "cryptoAPI.h"
 
@@ -23,11 +24,10 @@ server_to_ATM encrypt_and_send(ATM_to_server msg, int sock)
 	  *  check valid return
 	  */
 
-
 	int length = 16;
-	unsigned char msg_string[17];
-	memcpy(msg_string, &msg, length);
-	unsigned char packet[17];
+	unsigned char msg_string[length+1];
+	memcpy(msg_string, &msg, length-1);
+	unsigned char packet[length+1];
 
 	// Encrypt message into packet
 	if(symmetric_encrypt(msg_string, packet) != length)
@@ -43,7 +43,7 @@ server_to_ATM encrypt_and_send(ATM_to_server msg, int sock)
 		abort();
 	}
 
-	printf("sent packet\n"); // FIXME remove this
+	//printf("sent packet %u %u %u %" PRIu64 " %u\n", msg.action, msg.accounts, msg.amount, msg.session_token, msg.transaction_num); //FIXME remove this
 
 	// Receive packet
 	if(length != recv(sock, packet, length, MSG_WAITALL))
@@ -52,9 +52,9 @@ server_to_ATM encrypt_and_send(ATM_to_server msg, int sock)
 		abort();
 	}
 
-	unsigned char rec_string[17];
+	unsigned char rec_string[length+1];
 	// Decrypt packet into message
-	if(symmetric_decrypt(packet, rec_string) != length)
+	if(symmetric_decrypt(packet, rec_string) != length-1)
 	{
 		printf("failed to decrypt message\n");
 		abort();
@@ -62,16 +62,17 @@ server_to_ATM encrypt_and_send(ATM_to_server msg, int sock)
 
 	server_to_ATM rec;
 	memcpy(&rec, rec_string, length);
+	//printf("received packet %s %" PRIu64 " %u\n", rec.message, rmessageec.session_token, rec.transaction_num); //FIXME remove this
 
 	// Test session token and session transaction number
 	if(msg.session_token != rec.session_token)
 	{
-		printf("Possible spoofing detected\n");
+		printf("Possible spoofing detected with session token\n");
 		abort();
 	}
 	if(msg.transaction_num+1 != rec.transaction_num)
 	{
-		printf("Possible spoofing detected\n");
+		printf("Possible spoofing detected with transaction number\n");
 		abort();
 	}
 
